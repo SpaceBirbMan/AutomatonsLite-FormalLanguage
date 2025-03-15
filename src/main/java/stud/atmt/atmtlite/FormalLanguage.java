@@ -9,6 +9,7 @@ public class FormalLanguage {
     private String firstSymbol;
 
     public FormalLanguage(List<Rule> rules, int maxRepetitionsCount, String firstSymbol) {
+        Bus.globalError = "";
         this.rules = rules;
         this.firstSymbol = firstSymbol;
         this.maxRepetitionsCount = maxRepetitionsCount;
@@ -79,9 +80,13 @@ public class FormalLanguage {
 
     public String describe() {
         StringBuilder result = new StringBuilder();
-        createChainsAndDefineTerminals();
-        result.append("L = { ").append(getTerminalPart()).append(getConstraintPart()).append(" }.");
-        return result.toString();
+        extractTerminals();
+        if (createChainsAndDefineTerminals()) {
+            result.append("L = { ").append(getTerminalPart()).append(getConstraintPart()).append(" }.");
+            return result.toString();
+        } else {
+            return "Язык невозможно обработать данной программой из-за зацикленностей или слишком глубоких рекурсий";
+        }
     }
 
     ArrayList<String> serialTerminals = new ArrayList<>();
@@ -90,9 +95,13 @@ public class FormalLanguage {
     ArrayList<String> nonSerial = new ArrayList<>();
     HashMap<String, Integer> countableTerminals = new HashMap<>();
 
-    private void createChainsAndDefineTerminals() {
-        ArrayList<String> chains = generateChains(50);
+    private boolean createChainsAndDefineTerminals() {
+        ArrayList<String> chains = (ArrayList<String>) generateChains(50);
+        if (chains == null) {
+            return false;
+        }
         countTerminalsOccurrences(chains);
+        return true;
     }
 
     HashMap<String, ArrayList<Integer>> occMatrix;
@@ -181,82 +190,180 @@ public class FormalLanguage {
     }
 
     // todo.bug: Криво определяется первый символ, из-за чего странно работают алгоритмы, первое правило должно выносится в отдельную переменную и к общим не лезть, возможно
+    // todo.tips: Переписать всё на английский
 
-    private ArrayList<String> generateChains(int chains) {
-        ArrayList<String> result = new ArrayList<>();
-        HashSet<String> uniqueChains = new HashSet<>(); // Для хранения уникальных цепочек
-        Random random = new Random();
-        int maxIterations = 10000; // Максимальное количество итераций для одной цепочки
-        int maxAttempts = chains * 10; // Максимальное число попыток генерации цепочки
+    private HashSet<String> terminals = new HashSet<>();
 
-        // Список всех правил для систематического использования
-        List<Rule> allRules = new ArrayList<>(rules);
-        int ruleIndex = 0; // Индекс для систематического выбора правил
+    public HashSet<String> getTerminals() {
+        return terminals;
+    }
 
-        int attempts = 0;
-        while (result.size() < chains && attempts < maxAttempts) {
-            attempts++;
-            System.out.println("Генерация цепочки " + (result.size() + 1) + " из " + chains);
-            String currentChain = firstSymbol;
-            boolean isTerminal = false;
-            int iterations = 0;
+    public void setTerminals(HashSet<String> terminals) {
+        this.terminals = terminals;
+    }
 
-            // Пытаемся получить цепочку, состоящую только из терминалов
-            while (!isTerminal && iterations < maxIterations) {
-                iterations++;
-                isTerminal = true;
-                StringBuilder newChain = new StringBuilder();
+    private void extractTerminals() {
+        for (Rule rule : rules) {
+            char[] chars;
+            chars = rule.getKey().toCharArray();
+            checkCharArray(chars);
+            chars = rule.getValue().toCharArray();
+            checkCharArray(chars);
+        }
+    }
 
-                for (char symbol : currentChain.toCharArray()) {
-                    if (Character.isUpperCase(symbol)) { // Нетерминал
-                        isTerminal = false;
-                        List<Rule> applicableRules = new ArrayList<>();
-                        for (Rule rule : rules) {
-                            if (rule.getKey().equals(String.valueOf(symbol))) {
-                                applicableRules.add(rule);
-                            }
+    /// Add terminals from char array in set automatically
+    private void checkCharArray(char[] chars) {
+        for (char ch : chars) {
+            String strChar = String.valueOf(ch);
+            String lowerStr = strChar.toLowerCase();
+            if (strChar.equals(lowerStr)) {
+                terminals.add(strChar);
+            }
+        }
+    }
+
+    private class AddressChainCouple {
+        private String chain;
+        private boolean deadEnd;
+        
+        public AddressChainCouple(String chain, boolean isDeadEnd) {
+            this.deadEnd = isDeadEnd;
+            this.chain = chain;
+        }
+
+        public boolean isDeadEnd() {
+            return deadEnd;
+        }
+
+        public void setDeadEnd(boolean deadend) {
+            this.deadEnd = deadend;
+        }
+
+        public String getChain() {
+            return chain;
+        }
+    }
+
+    private final Set<String> deadEnds = new HashSet<>(); // Множество тупиковых цепочек
+
+    /**
+     * Генерация цепочек
+     * @param chains количество цепочек, которые нужно сгенерировать
+     * @return список тупиковых цепочек
+     */
+    public List<String> generateChains(long chains) {
+        deadEnds.clear();
+        NTree<AddressChainCouple> chainsGraph = new NTree<>(new AddressChainCouple(firstSymbol, isRootDeadEnd()));
+        long iteration = 1;
+        short repeats = 0;
+        long iterationOld = 0;
+
+        while (iteration < chains) {
+            if (repeats > 5) break;
+            iterationOld = iteration;
+            // Получаем все тупиковые узлы на текущем этапе
+            List<NJoint<AddressChainCouple>> leafNodes = chainsGraph.getLeafNodes();
+
+            for (NJoint<AddressChainCouple> joint : leafNodes) {
+                if (!joint.data.isDeadEnd()) {
+                    // Генерируем возможные продолжения цепочки
+                    List<String> ways = getWays(joint.data.getChain());
+
+                    if (!ways.isEmpty()) {
+                        // Добавляем новые цепочки в дерево
+                        for (String way : ways) {
+                            joint.AddLink(new NJoint<>(new AddressChainCouple(way, isDeadEnd(way))));
+                            iteration++;
                         }
-                        if (!applicableRules.isEmpty()) {
-                            // Чередуем случайный выбор и систематический выбор правил
-                            Rule selectedRule;
-                            if (ruleIndex < allRules.size()) {
-                                selectedRule = allRules.get(ruleIndex);
-                                ruleIndex++;
-                            } else {
-                                selectedRule = applicableRules.get(random.nextInt(applicableRules.size()));
-                            }
-                            newChain.append(selectedRule.getValue());
-                        } else {
-                            newChain.append(symbol); // Если нет правил, оставляем символ как есть
-                        }
-                    } else { // Терминал
-                        newChain.append(symbol);
+                    } else {
+                        // Если продолжений нет, отмечаем узел как тупиковый
+                        joint.data.setDeadEnd(true);
+                        deadEnds.add(joint.data.getChain());
                     }
                 }
-                currentChain = newChain.toString();
             }
-
-            // Если цепочка не получилась терминальной, выводим сообщение и пропускаем её
-            if (!isTerminal) {
-                System.out.println("Не удалось получить цепочку, состоящую только из терминалов после " + maxIterations +
-                        " итераций. Грамматика недостижима");
-                // Можно выбрать прерывание генерации, если ни одна цепочка не завершается терминально:
-                break;
-            }
-
-            // Проверяем уникальность цепочки
-            if (!uniqueChains.contains(currentChain)) {
-                uniqueChains.add(currentChain);
-                result.add(currentChain);
-            } else {
-                System.out.println("Цепочка уже существует: " + currentChain + ". Пропуск.");
+            if (iterationOld == iteration) {
+                repeats++;
             }
         }
 
+        // Собираем все тупиковые цепочки
+        List<String> result = new ArrayList<>();
+        for (NJoint<AddressChainCouple> joint : chainsGraph.getLeafNodes()) {
+            if (joint.data.isDeadEnd()) {
+                result.add(joint.data.getChain());
+            }
+        }
+
+        // Проверяем результат
+        if (checkResult(result)) {
+            return result;
+        }
+        return null;
+    }
+
+    /**
+     * Проверка результата
+     * @param result список тупиковых цепочек
+     * @return true, если результат корректный
+     */
+    private boolean checkResult(List<String> result) {
         if (result.isEmpty()) {
-            System.out.println("Ни одной терминальной цепочки получено. Вероятно, язык недескриптируемый.");
+            return false; // Если результат пуст, генерация не удалась
         }
-        return result;
+        // Дополнительные проверки, если необходимо
+        return true;
+    }
+
+    /**
+     * Проверка, является ли цепочка тупиковой
+     * @param chain цепочка для проверки
+     * @return true, если цепочка тупиковая
+     */
+    private boolean isDeadEnd(String chain) {
+        // Если цепочка состоит только из терминалов, она тупиковая
+        for (char c : chain.toCharArray()) {
+            if (Character.isUpperCase(c)) { // Предполагаем, что нетерминалы — это заглавные буквы
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Получение всех возможных продолжений цепочки
+     * @param chain текущая цепочка
+     * @return список возможных продолжений
+     */
+    private List<String> getWays(String chain) {
+        List<String> ways = new ArrayList<>();
+        for (int i = 0; i < chain.length(); i++) {
+            char symbol = chain.charAt(i);
+            if (Character.isUpperCase(symbol)) { // Если символ — нетерминал
+                for (Rule rule : rules) {
+                    if (rule.getKey().equals(String.valueOf(symbol))) {
+                        // Заменяем нетерминал на его возможные значения
+                        String newChain = chain.substring(0, i) + rule.getValue() + chain.substring(i + 1);
+                        ways.add(newChain);
+                    }
+                }
+            }
+        }
+        return ways;
+    }
+
+    /**
+     * Проверка, является ли корневой символ тупиковым
+     * @return true, если корневой символ тупиковый
+     */
+    private boolean isRootDeadEnd() {
+        for (Rule rule : rules) {
+            if (rule.getKey().equals(firstSymbol)) {
+                return rule.getValue() == null; // Если у корневого символа нет правил, он тупиковый
+            }
+        }
+        return false;
     }
 
     private String getConstraintPart() {

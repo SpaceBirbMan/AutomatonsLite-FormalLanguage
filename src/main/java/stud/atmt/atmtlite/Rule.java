@@ -5,7 +5,7 @@ import java.util.ArrayList;
 public class Rule {
     private String key; // Левая часть правила
     private String value; // Правая часть правила
-    private boolean isLooped; // Флаг зацикливания
+    private boolean isLooped; // Флаг зацикливания (выставляется только в одном методе и там же и используется)
 
     public Rule(String key, String value, boolean isLooped) {
         this.key = key;

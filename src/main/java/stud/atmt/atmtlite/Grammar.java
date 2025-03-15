@@ -17,6 +17,7 @@ public class Grammar {
     public Grammar(List<String> nonterminal, List<String> terminal, List<Rule> rules, String startSymbol) {
 //        this.nonterminal = nonterminal;
 //        this.terminal = terminal;
+        Bus.globalError = "";
         this.rules = rules;
         this.startSymbol = startSymbol;
     }
@@ -65,11 +66,11 @@ public class Grammar {
         }
     }
 
-    public List<String> makeSequence(String text) {
+    public List<String> makeSequence(String target) {
         int maxCount = 10000;
         int count = 0;
         List<String> sequence = new ArrayList<>();
-        sequence.add(text);
+        sequence.add(target);
 
         while (count < maxCount) {
             boolean changed = false;
@@ -78,10 +79,10 @@ public class Grammar {
                 String key = rule.getKey();
                 String value = rule.getValue();
 
-                int pos = text.lastIndexOf(value);
+                int pos = target.lastIndexOf(value);
                 if (pos != -1) {
-                    text = text.substring(0, pos) + key + text.substring(pos + value.length());
-                    sequence.add(text);
+                    target = target.substring(0, pos) + key + target.substring(pos + value.length());
+                    sequence.add(target);
                     changed = true;
                 }
             }
@@ -93,58 +94,5 @@ public class Grammar {
         Collections.reverse(sequence);
 
         return sequence;
-    }
-
-    public ArrayList<ArrayList<String>> makeSequenceMap(String target) {
-        ArrayList<ArrayList<String>> allSequences = new ArrayList<>();
-        Queue<ArrayList<String>> queue = new LinkedList<>();
-
-        // Начинаем с начального символа
-        ArrayList<String> startSequence = new ArrayList<>();
-        startSequence.add(startSymbol);
-        queue.add(startSequence);
-
-        while (!queue.isEmpty()) {
-            ArrayList<String> currentSequence = queue.poll();
-            String currentString = currentSequence.get(currentSequence.size() - 1);
-
-            if (currentString.equals(target)) {
-                allSequences.add(new ArrayList<>(currentSequence));
-                continue;
-            }
-
-            // Подставляем все возможные правила
-            for (Rule rule : rules) {
-                String key = rule.getKey();
-                String value = rule.getValue();
-
-                // Проверяем все вхождения key в строке
-                int pos = currentString.indexOf(key);
-                while (pos != -1) {
-                    String newString = currentString.substring(0, pos) + value + currentString.substring(pos + key.length());
-
-                    // Создаём новый путь подстановок
-                    ArrayList<String> newSequence = new ArrayList<>(currentSequence);
-                    newSequence.add(newString);
-                    queue.add(newSequence);
-
-                    // Ищем дальше
-                    pos = currentString.indexOf(key, pos + 1);
-                }
-            }
-        }
-
-        return allSequences;
-    }
-
-    public String describeLanguage() {
-        StringBuilder stringBuilder = new StringBuilder();
-        stringBuilder.append("L = {");
-        for (Rule rule : rules) {
-
-        }
-        stringBuilder.append("|");
-        stringBuilder.append("}");
-        return stringBuilder.toString();
     }
 }
