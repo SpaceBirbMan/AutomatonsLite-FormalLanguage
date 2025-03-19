@@ -81,6 +81,9 @@ public class FormalLanguage {
     public String describe() {
         StringBuilder result = new StringBuilder();
         extractTerminals();
+        // todo.logic: Обработка палиндромов L = {a1a2…anan…a2a1 | a^i = {0, 1}}
+        // todo.logic: Обработка групп терминалов {a^n,b^m,c^k}, d^n, e^n^2
+        // todo.logic: Обработка групп терминалов (ab)^n (n раз последовательность ab)
         if (createChainsAndDefineTerminals()) {
             result.append("L = { ").append(getTerminalPart()).append(getConstraintPart()).append(" }.");
             return result.toString();
@@ -388,7 +391,7 @@ public class FormalLanguage {
     }
 
     private String getTerminalArray() {
-        if (!nonSerial.isEmpty()) return " {" + getNonSerialTerminals() + "} " + "contains in (G); ";
+        if (!nonSerial.isEmpty()) return " {" + getNonSerialTerminals() + "}; ";
         return "";
     }
 

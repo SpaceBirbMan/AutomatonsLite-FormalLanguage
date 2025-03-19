@@ -5,6 +5,7 @@ import java.util.*;
 public class Grammar {
     private List<Rule> rules; // Правила
     private String startSymbol; // Начальный символ
+    private HashMap<String, Integer> terminalsAndConstraints;
 
     public void setStartSymbol(String startSymbol) {
         this.startSymbol = startSymbol;
@@ -12,6 +13,12 @@ public class Grammar {
 
     public String getStartSymbol() {
         return startSymbol;
+    }
+
+    public Grammar() {}
+
+    public Grammar(HashMap<String, Integer> terminalsAndConstraints) {
+        this.terminalsAndConstraints = terminalsAndConstraints;
     }
 
     public Grammar(List<String> nonterminal, List<String> terminal, List<Rule> rules, String startSymbol) {
@@ -66,6 +73,7 @@ public class Grammar {
         }
     }
 
+    /// Генерирует цепочки очень интересно, пытаясь правила по тупому подстроить под целевую цепочку
     public List<String> makeSequence(String target) {
         int maxCount = 10000;
         int count = 0;
@@ -94,5 +102,35 @@ public class Grammar {
         Collections.reverse(sequence);
 
         return sequence;
+    }
+
+    public String buildGrammar(GrammarApp.ParsedLanguage parsedLanguage) {
+        HashMap<String, String> terminalsAndConstraints = parsedLanguage.terminalsAndConstraints();
+        HashMap<String, String> terminalsGroups = parsedLanguage.terminalsGroups();
+        HashMap<String, String> palindrome = parsedLanguage.palindrome();
+        ArrayList<String> randomTerminals = parsedLanguage.randomTerminals();
+
+        ArrayList<Rule> rules = new ArrayList<>();
+
+        createRulesForStandardTerminals(terminalsAndConstraints);
+        createRulesForGroups(terminalsGroups);
+        createRulesForPalindrome(palindrome);
+        createRulesForRandomTerminals(randomTerminals);
+
+        return null;
+    }
+
+    private void createRulesForRandomTerminals(ArrayList<String> randomTerminals) {
+        // вообще, строго говоря, можно просто сделать одно правило, которое будет определять генерацию всех рандомных терминалов
+        // типа R = aR | bR | cR | dR | a | b | c | d
+    }
+
+    private void createRulesForPalindrome(HashMap<String, String> palindrome) {
+    }
+
+    private void createRulesForGroups(HashMap<String, String> terminalsGroups) {
+    }
+
+    private void createRulesForStandardTerminals(HashMap<String, String> terminalsAndConstraints) {
     }
 }
