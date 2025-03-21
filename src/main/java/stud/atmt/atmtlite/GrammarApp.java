@@ -3,12 +3,14 @@ package stud.atmt.atmtlite;
 import javafx.application.Application;
 import javafx.scene.Scene;
 import javafx.scene.control.*;
+import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
 import javafx.stage.Stage;
 
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Objects;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -34,6 +36,35 @@ public class GrammarApp extends Application {
         Button typeGrammarButton = new Button("Тип грамматики");
         Button deriveButton = new Button("Путь к целевой цепочке");
         Button makeGrammarButton = new Button("Построить грамматику по языку");
+        Button compareGrammar = new Button("Сравнение грамматик");
+        Button secondGenerator = new Button("Построить КС грамматику");
+
+        compareGrammar.setOnAction(actionEvent -> {
+            TextArea left = new TextArea();
+            TextArea right = new TextArea();
+            Label answer = new Label("Ответ...");
+            Button compare = new Button("Сравнить");
+            Button back = new Button("Назад");
+            compare.setOnAction(actionEvent1 -> {
+
+                FormalLanguage grammarL = new FormalLanguage(parseRules(left.getText()), "S");
+                FormalLanguage grammarR = new FormalLanguage(parseRules(right.getText()), "S");
+                String leftA = grammarL.describe();
+                String rightA = grammarR.describe();
+                if (leftA.equals(rightA)) {
+                    answer.setText("Грамматики эквивалентны");
+                } else {
+                    answer.setText("Грамматики не эквиваленты");
+                }
+            });
+            HBox high = new HBox(left, right);
+            VBox general = new VBox(high, compare, back, answer);
+
+            Scene scene1 = new Scene(general, 500, 400);
+            primaryStage.setTitle("Ы");
+            primaryStage.setScene(scene1);
+            primaryStage.show();
+        });
 
         TextArea outputArea = new TextArea();
         outputArea.setEditable(false);
@@ -54,6 +85,15 @@ public class GrammarApp extends Application {
             String result = formalLanguage.describe();
             outputArea.setText("Описание: " + result);
         });
+
+        secondGenerator.setOnAction(actionEvent -> {
+            String input = inputArea.getText();
+            String language = new FormalLanguage(parseRules(input),"S").describe();
+            System.out.println(language);
+            System.out.println(parseLanguage(language));
+            outputArea.setText(new Grammar(parseRules(input)).buildGrammar(parseLanguage(language)));
+        });
+
 
         // Обработка кнопки "Левый вывод"
         outputLeftButton.setOnAction(event -> {
@@ -94,12 +134,12 @@ public class GrammarApp extends Application {
         makeGrammarButton.setOnAction(event -> {
             String input = languageArea.getText();
             Grammar grammar = new Grammar();
-            System.out.println(parseLanguage(input).toString());
+            System.out.println(Objects.requireNonNull(parseLanguage(input)).toString());
             inputArea.setText(grammar.buildGrammar(parseLanguage(input)));
         });
 
         // Компоновка интерфейса
-        VBox root = new VBox(10, inputArea, languageArea, targetInput, translateButton, outputLeftButton, makeGrammarButton, typeGrammarButton, deriveButton, describeLanguageButton, outputArea);
+        VBox root = new VBox(10, inputArea, languageArea, targetInput, secondGenerator, compareGrammar, translateButton, outputLeftButton, makeGrammarButton, typeGrammarButton, deriveButton, describeLanguageButton, outputArea);
         Scene scene = new Scene(root, 500, 400);
         primaryStage.setTitle("Грамматический процессор");
         primaryStage.setScene(scene);
@@ -111,6 +151,7 @@ public class GrammarApp extends Application {
                                  HashMap<String, String> palindrome,
                                  ArrayList<String> randomTerminals) {}
 
+    // todo: Не переварил L = { a^n0, b^n0 | n0 = 1 }
     private ParsedLanguage parseLanguage(String input) {
         if (isLanguageCorrect(input)) {
             HashMap<String, String> terminalsAndConstraints = getTerminals(input); // терминал - его ограничение a^n | n > 0 -> {a, n>0}
@@ -166,7 +207,6 @@ public class GrammarApp extends Application {
         );
         Matcher palindromeMatcher = palindromePattern.matcher(terminalsPart);
 
-        // Регулярное выражение для поиска ограничений в формате <var>**<indexVar> = { ... }
         Pattern constraintPattern = Pattern.compile("([a-z0]\\*\\*[a-z]+)(\\s*=\\s*\\{.+\\})?");
         Matcher constraintMatcher = constraintPattern.matcher(constraintsPart);
 
@@ -242,7 +282,7 @@ public class GrammarApp extends Application {
         for (String terminal : terminals) {
             terminal = terminal.trim();
             // Ищем терминалы в формате a^n1, b^n2 и т.д.
-            if (terminal.matches("[a-z]+\\^[a-z0-9]+")) {
+            if (terminal.matches("[a-z-0-9]+\\^[a-z0-9]+")) {
                 String[] terminalParts = terminal.split("\\^");
                 String symbol = terminalParts[0]; // Терминал (например, a)
                 String constraintVar = terminalParts[1]; // Переменная ограничения (например, n1)

@@ -33,6 +33,14 @@ public class Rule {
         isLooped = looped;
     }
 
+    public void setKey(String key) {
+        this.key = key;
+    }
+
+    public void setValue(String value) {
+        this.value = value;
+    }
+
     @Override
     public String toString() {
         return key + " -> " + value;

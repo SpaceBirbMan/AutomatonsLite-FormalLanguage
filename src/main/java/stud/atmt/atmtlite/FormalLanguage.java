@@ -85,7 +85,7 @@ public class FormalLanguage {
         // todo.logic: Обработка групп терминалов {a^n,b^m,c^k}, d^n, e^n^2
         // todo.logic: Обработка групп терминалов (ab)^n (n раз последовательность ab)
         if (createChainsAndDefineTerminals()) {
-            result.append("L = { ").append(getTerminalPart()).append(getConstraintPart()).append(" }.");
+            result.append("L = { ").append(getTerminalPart()).append(getConstraintPart()).append(" }");
             return result.toString();
         } else {
             return "Язык невозможно обработать данной программой из-за зацикленностей или слишком глубоких рекурсий";
@@ -371,15 +371,29 @@ public class FormalLanguage {
 
     private String getConstraintPart() {
         StringBuilder result = new StringBuilder();
+        Set<String> uniqueConstraints = new HashSet<>(); // Для хранения уникальных условий
+
         for (Map.Entry<String, String> entry : terminalsAndCounters.entrySet()) {
+            String constraint;
             if (countableTerminals.containsKey(entry.getKey())) {
-                result.append(entry.getValue()).append(" = ").append(countableTerminals.get(entry.getKey())).append("; ");
+                constraint = entry.getValue() + " = " + countableTerminals.get(entry.getKey());
             } else {
-                result.append(entry.getValue()).append(" > ").append(getMinOccurrencesNumb(entry.getKey())).append("; ");
+                constraint = entry.getValue() + " >= " + getMinOccurrencesNumb(entry.getKey());
+            }
+
+            // Добавляем условие только если оно уникально
+            if (uniqueConstraints.add(constraint)) {
+                result.append(constraint).append(", ");
             }
         }
-        if (result.isEmpty()) return "";
-        return " | " + result;
+
+        // Удаляем последнюю запятую, если строка не пустая
+        if (result.length() > 0) {
+            result.setLength(result.length() - 2); // Удаляем ", "
+        }
+
+        // Возвращаем результат с добавлением " | ", если строка не пустая
+        return result.isEmpty() ? "" : " | " + result.toString();
     }
 
     private int getMinOccurrencesNumb(String key) {
@@ -391,14 +405,14 @@ public class FormalLanguage {
     }
 
     private String getTerminalArray() {
-        if (!nonSerial.isEmpty()) return " {" + getNonSerialTerminals() + "}; ";
+        if (!nonSerial.isEmpty()) return " {" + getNonSerialTerminals() + "}, ";
         return "";
     }
 
     private String getNonSerialTerminals() {
         StringBuilder result = new StringBuilder();
         for (String term : nonSerial) {
-            result.append(term).append("; ");
+            result.append(term).append(", ");
         }
         return result.toString();
     }
@@ -446,16 +460,21 @@ public class FormalLanguage {
             // Если связаны, используем одну переменную n
             String count = getCountForTerminal();
             for (String term : serialTerminals) {
-                result.append(term).append("^").append(count).append("; ");
+                result.append(term).append("^").append(count).append(", ");
                 terminalsAndCounters.put(term, count);
             }
         } else {
             // Если не связаны, используем отдельные переменные для каждого терминала
             for (String term : serialTerminals) {
                 String count = getCountForTerminal();
-                result.append(term).append("^").append(count).append("; ");
+                result.append(term).append("^").append(count).append(", ");
                 terminalsAndCounters.put(term, count);
             }
+        }
+
+        // Удаляем последнюю запятую, если строка не пустая
+        if (!result.isEmpty()) {
+            result.setLength(result.length() - 2); // Удаляем ", "
         }
 
         return result.toString();
