@@ -1,6 +1,8 @@
 package stud.atmt.atmtlite;
 
 import java.util.*;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class Grammar {
     private List<Rule> rules; // Правила
@@ -104,7 +106,7 @@ public class Grammar {
         return sequence;
     }
 
-    public String buildGrammar(GrammarApp.ParsedLanguage parsedLanguage) {
+    public String buildGrammar(boolean optimizationFlag, GrammarApp.ParsedLanguage parsedLanguage) {
         if (parsedLanguage == null) return "";
         HashMap<String, String> terminalsAndConstraints = parsedLanguage.terminalsAndConstraints();
         HashMap<String, String> terminalsGroups = parsedLanguage.terminalsGroups();
@@ -122,8 +124,10 @@ public class Grammar {
         rules.addAll(createRulesForPalindrome(palindrome, startNonTerminal));
         rules.addAll(createRulesForRandomTerminals(randomTerminals, startNonTerminal));
 
-        rules = optimizeRules(rules); // оптимизация, собирает правила в кучу, изменяя вариант написания выбора путей
-        // S = A S = B -> S = A | B
+        if (optimizationFlag) {
+            rules = optimizeRules(rules); // оптимизация, собирает правила в кучу, изменяя вариант написания выбора путей
+            // S = A S = B -> S = A | B
+        }
 
         // Сортируем правила
         rules = sortRules(rules);
@@ -401,5 +405,32 @@ public class Grammar {
         }
 
         return rules;
+    }
+
+    public String convertToRegular(String grammar) {
+        Map<String, ArrayList<String>> rules = new LinkedHashMap<>();
+        parseGrammar(grammar, rules);
+
+        StringBuilder regularGrammar = new StringBuilder();
+        for (Map.Entry<String, ArrayList<String>> entry : rules.entrySet()) {
+            String nonTerminal = entry.getKey();
+            for (String production : entry.getValue()) {
+                regularGrammar.append(nonTerminal).append(" = ").append(production).append("\n");
+            }
+        }
+        return regularGrammar.toString();
+    }
+
+
+    private void parseGrammar(String grammar, Map<String, ArrayList<String>> rules) {
+        Pattern pattern = Pattern.compile("([A-Z])\\s*=\\s*(.+)");
+        for (String line : grammar.split("\n")) {
+            Matcher matcher = pattern.matcher(line);
+            if (matcher.find()) {
+                String nonTerminal = matcher.group(1);
+                String[] productions = matcher.group(2).split("\\|");
+                rules.computeIfAbsent(nonTerminal, k -> new ArrayList<>()).addAll(Arrays.asList(productions));
+            }
+        }
     }
 }

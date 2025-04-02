@@ -271,7 +271,7 @@ public class FormalLanguage {
             for (NJoint<AddressChainCouple> joint : leafNodes) {
                 if (!joint.data.isDeadEnd()) {
                     // Генерируем возможные продолжения цепочки
-                    List<String> ways = getWays(joint.data.getChain());
+                    List<String> ways = getWays(joint.data.getChain(), 10, new HashSet<>());
 
                     if (!ways.isEmpty()) {
                         // Добавляем новые цепочки в дерево
@@ -339,16 +339,21 @@ public class FormalLanguage {
      * @param chain текущая цепочка
      * @return список возможных продолжений
      */
-    private List<String> getWays(String chain) {
+    private List<String> getWays(String chain, int maxDepth, Set<String> visited) {
+        if (maxDepth <= 0 || visited.contains(chain)) {
+            return new ArrayList<>();
+        }
+        visited.add(chain);
+
         List<String> ways = new ArrayList<>();
         for (int i = 0; i < chain.length(); i++) {
             char symbol = chain.charAt(i);
-            if (Character.isUpperCase(symbol)) { // Если символ — нетерминал
+            if (Character.isUpperCase(symbol)) {
                 for (Rule rule : rules) {
                     if (rule.getKey().equals(String.valueOf(symbol))) {
-                        // Заменяем нетерминал на его возможные значения
                         String newChain = chain.substring(0, i) + rule.getValue() + chain.substring(i + 1);
                         ways.add(newChain);
+                        ways.addAll(getWays(newChain, maxDepth - 1, visited));
                     }
                 }
             }
@@ -401,11 +406,19 @@ public class FormalLanguage {
     }
 
     private String getTerminalPart() {
-        return getTerminalSequence() + getTerminalArray();
+        String terminalSequence = getTerminalSequence();
+        String terminalArray = getTerminalArray();
+        if (terminalArray.isEmpty()) {
+            return terminalSequence;
+        }
+        if (terminalSequence.isEmpty()) {
+            return terminalArray;
+        }
+        return getTerminalSequence() + ", " + getTerminalArray();
     }
 
     private String getTerminalArray() {
-        if (!nonSerial.isEmpty()) return " {" + getNonSerialTerminals() + "}, ";
+        if (!nonSerial.isEmpty()) return " <" + getNonSerialTerminals() + "> " + "E (G) ";
         return "";
     }
 
@@ -413,6 +426,10 @@ public class FormalLanguage {
         StringBuilder result = new StringBuilder();
         for (String term : nonSerial) {
             result.append(term).append(", ");
+        }
+        // Удаляем последнюю запятую, если строка не пустая
+        if (!result.isEmpty()) {
+            result.setLength(result.length() - 2); // Удаляем ", "
         }
         return result.toString();
     }
