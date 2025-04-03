@@ -418,7 +418,7 @@ public class FormalLanguage {
     }
 
     private String getTerminalArray() {
-        if (!nonSerial.isEmpty()) return " <" + getNonSerialTerminals() + "> " + "E (G) ";
+        if (!nonSerial.isEmpty()) return "<" + getNonSerialTerminals() + "> " + "E (G) ";
         return "";
     }
 

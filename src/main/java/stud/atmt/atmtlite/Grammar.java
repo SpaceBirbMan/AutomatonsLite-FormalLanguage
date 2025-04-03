@@ -3,6 +3,7 @@ package stud.atmt.atmtlite;
 import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 public class Grammar {
     private List<Rule> rules; // Правила
@@ -40,39 +41,7 @@ public class Grammar {
     }
 
     public String getTypeGrammar() {
-        boolean isRegular = true;
-        boolean isContextFree = true;
-        boolean isContextSensitive = true;
-
-        for (Rule rule : rules) {
-            String lhs = rule.getKey();
-            String rhs = rule.getValue();
-
-            // Проверка на регулярность
-            if (!lhs.matches("[A-Z]") || !rhs.matches("[a-z]*[A-Z]?[a-z]*")) {
-                isRegular = false;
-            }
-
-            // Проверка на контекстно-свободность
-            if (!lhs.matches("[A-Z]")) {
-                isContextFree = false;
-            }
-
-            // Проверка на контекстно-зависимость
-            if (lhs.length() > rhs.length()) {
-                isContextSensitive = false;
-            }
-        }
-
-        if (isRegular) {
-            return "Тип 3 — Регулярная грамматика";
-        } else if (isContextFree) {
-            return "Тип 2 — Контекстно-свободная грамматика";
-        } else if (isContextSensitive) {
-            return "Тип 1 — Контекстно-зависимая грамматика";
-        } else {
-            return "Тип 0 — Неограниченная грамматика";
-        }
+        return "Denied of Service";
     }
 
     /// Генерирует цепочки очень интересно, пытаясь правила по тупому подстроить под целевую цепочку
@@ -409,19 +378,49 @@ public class Grammar {
 
     public String convertToRegular(String grammar) {
         Map<String, ArrayList<String>> rules = new LinkedHashMap<>();
-        parseGrammar(grammar, rules);
+        parseGrammar(grammar, rules); // Предполагается, что этот метод разбирает грамматику
 
-        StringBuilder regularGrammar = new StringBuilder();
+        // 1. Находим нетерминалы, которые ведут ТОЛЬКО к ε
+        Set<String> epsilonNonTerminals = new HashSet<>();
         for (Map.Entry<String, ArrayList<String>> entry : rules.entrySet()) {
+            String nonTerminal = entry.getKey();
+            List<String> productions = entry.getValue();
+            if (productions.size() == 1 && productions.get(0).equals("ε")) {
+                epsilonNonTerminals.add(nonTerminal);
+            }
+        }
+
+        // 2. Удаляем эти нетерминалы из правил и заменяем их вхождения
+        Map<String, ArrayList<String>> optimizedRules = new LinkedHashMap<>();
+        for (Map.Entry<String, ArrayList<String>> entry : rules.entrySet()) {
+            String nonTerminal = entry.getKey();
+            if (epsilonNonTerminals.contains(nonTerminal)) {
+                continue; // Пропускаем правила для бесполезных нетерминалов
+            }
+
+            ArrayList<String> newProductions = new ArrayList<>();
+            for (String production : entry.getValue()) {
+                // Заменяем все вхождения бесполезных нетерминалов на пустую строку
+                String optimizedProduction = production;
+                for (String epsNonTerm : epsilonNonTerminals) {
+                    optimizedProduction = optimizedProduction.replace(epsNonTerm, "");
+                }
+                newProductions.add(optimizedProduction.isEmpty() ? "ε" : optimizedProduction);
+            }
+            optimizedRules.put(nonTerminal, newProductions);
+        }
+
+        // 3. Формируем строку результата
+        StringBuilder regularGrammar = new StringBuilder();
+        for (Map.Entry<String, ArrayList<String>> entry : optimizedRules.entrySet()) {
             String nonTerminal = entry.getKey();
             for (String production : entry.getValue()) {
                 regularGrammar.append(nonTerminal).append(" = ").append(production).append("\n");
             }
         }
+
         return regularGrammar.toString();
     }
-
-
     private void parseGrammar(String grammar, Map<String, ArrayList<String>> rules) {
         Pattern pattern = Pattern.compile("([A-Z])\\s*=\\s*(.+)");
         for (String line : grammar.split("\n")) {
