@@ -44,37 +44,6 @@ public class Grammar {
         return "Denied of Service";
     }
 
-    /// Генерирует цепочки очень интересно, пытаясь правила по тупому подстроить под целевую цепочку
-    public List<String> makeSequence(String target) {
-        int maxCount = 10000;
-        int count = 0;
-        List<String> sequence = new ArrayList<>();
-        sequence.add(target);
-
-        while (count < maxCount) {
-            boolean changed = false;
-
-            for (Rule rule : rules) {
-                String key = rule.getKey();
-                String value = rule.getValue();
-
-                int pos = target.lastIndexOf(value);
-                if (pos != -1) {
-                    target = target.substring(0, pos) + key + target.substring(pos + value.length());
-                    sequence.add(target);
-                    changed = true;
-                }
-            }
-
-            if (!changed) break;
-            count++;
-        }
-
-        Collections.reverse(sequence);
-
-        return sequence;
-    }
-
     public String buildGrammar(boolean optimizationFlag, GrammarApp.ParsedLanguage parsedLanguage) {
         if (parsedLanguage == null) return "";
         HashMap<String, String> terminalsAndConstraints = parsedLanguage.terminalsAndConstraints();
@@ -347,7 +316,7 @@ public class Grammar {
                 int count = Integer.parseInt(value);
                 StringBuilder ruleValue = new StringBuilder();
                 for (int i = 0; i < count; i++) {
-                    ruleValue.append(terminal).append("");
+                    ruleValue.append(terminal);
                 }
                 String nextNonTerminal = getNextNonTerminal();
                 rules.add(new Rule(currentNonTerminal, ruleValue.toString().trim() + " " + nextNonTerminal));
@@ -362,7 +331,7 @@ public class Grammar {
 
                 StringBuilder ruleValue = new StringBuilder();
                 for (int i = 0; i < minCount; i++) {
-                    ruleValue.append(terminal).append("");
+                    ruleValue.append(terminal);
                 }
                 String nextNonTerminal = getNextNonTerminal();
                 ruleValue.append(nextNonTerminal);
@@ -376,60 +345,80 @@ public class Grammar {
         return rules;
     }
 
-    public String convertToRegular(String grammar) {
-        Map<String, ArrayList<String>> rules = new LinkedHashMap<>();
-        parseGrammar(grammar, rules); // Предполагается, что этот метод разбирает грамматику
-
-        // 1. Находим нетерминалы, которые ведут ТОЛЬКО к ε
-        Set<String> epsilonNonTerminals = new HashSet<>();
-        for (Map.Entry<String, ArrayList<String>> entry : rules.entrySet()) {
-            String nonTerminal = entry.getKey();
-            List<String> productions = entry.getValue();
-            if (productions.size() == 1 && productions.get(0).equals("ε")) {
-                epsilonNonTerminals.add(nonTerminal);
-            }
-        }
-
-        // 2. Удаляем эти нетерминалы из правил и заменяем их вхождения
-        Map<String, ArrayList<String>> optimizedRules = new LinkedHashMap<>();
-        for (Map.Entry<String, ArrayList<String>> entry : rules.entrySet()) {
-            String nonTerminal = entry.getKey();
-            if (epsilonNonTerminals.contains(nonTerminal)) {
-                continue; // Пропускаем правила для бесполезных нетерминалов
-            }
-
-            ArrayList<String> newProductions = new ArrayList<>();
-            for (String production : entry.getValue()) {
-                // Заменяем все вхождения бесполезных нетерминалов на пустую строку
-                String optimizedProduction = production;
-                for (String epsNonTerm : epsilonNonTerminals) {
-                    optimizedProduction = optimizedProduction.replace(epsNonTerm, "");
-                }
-                newProductions.add(optimizedProduction.isEmpty() ? "ε" : optimizedProduction);
-            }
-            optimizedRules.put(nonTerminal, newProductions);
-        }
-
-        // 3. Формируем строку результата
-        StringBuilder regularGrammar = new StringBuilder();
-        for (Map.Entry<String, ArrayList<String>> entry : optimizedRules.entrySet()) {
-            String nonTerminal = entry.getKey();
-            for (String production : entry.getValue()) {
-                regularGrammar.append(nonTerminal).append(" = ").append(production).append("\n");
-            }
-        }
-
-        return regularGrammar.toString();
+    public ArrayList<List<String>> makeSequences(String target) {
+        ArrayList<List<String>> result = new ArrayList<>();
+        List<String> initial = new ArrayList<>();
+        initial.add(startSymbol); // стартовый символ
+        dfs(startSymbol, target, initial, result, 0);
+        return result;
     }
-    private void parseGrammar(String grammar, Map<String, ArrayList<String>> rules) {
-        Pattern pattern = Pattern.compile("([A-Z])\\s*=\\s*(.+)");
-        for (String line : grammar.split("\n")) {
-            Matcher matcher = pattern.matcher(line);
-            if (matcher.find()) {
-                String nonTerminal = matcher.group(1);
-                String[] productions = matcher.group(2).split("\\|");
-                rules.computeIfAbsent(nonTerminal, k -> new ArrayList<>()).addAll(Arrays.asList(productions));
+
+    private void dfs(String current, String target, List<String> path, List<List<String>> result, int depth) {
+        if (depth > 20) return;
+
+        if (current.equals(target)) {
+            result.add(new ArrayList<>(path));
+            return;
+        }
+
+        if (current.replaceAll("[A-Z]", "").length() > target.length()) return; // Только терминалы сравниваем
+
+        for (Rule rule : rules) {
+            String from = rule.getKey();
+            String to = rule.getValue();
+
+            // Все вхождения нетерминала, который нужно заменить
+            List<Integer> positions = new ArrayList<>();
+            int idx = current.indexOf(from);
+            while (idx != -1) {
+                positions.add(idx);
+                idx = current.indexOf(from, idx + 1);
+            }
+
+            // Пробуем замену в каждой позиции
+            for (int pos : positions) {
+                String newStr;
+                if (to.equals("ε")) {
+                    newStr = current.substring(0, pos) + current.substring(pos + from.length());
+                } else {
+                    newStr = current.substring(0, pos) + to + current.substring(pos + from.length());
+                }
+
+                path.add(newStr);
+                dfs(newStr, target, path, result, depth + 1);
+                path.remove(path.size() - 1);
             }
         }
+    }
+
+    /// Генерирует цепочки очень интересно, пытаясь правила по тупому подстроить под целевую цепочку
+    public List<String> makeSequence(String target) {
+        int maxCount = 10000;
+        int count = 0;
+        List<String> sequence = new ArrayList<>();
+        sequence.add(target);
+
+        while (count < maxCount) {
+            boolean changed = false;
+
+            for (Rule rule : rules) {
+                String key = rule.getKey();
+                String value = rule.getValue();
+
+                int pos = target.lastIndexOf(value);
+                if (pos != -1) {
+                    target = target.substring(0, pos) + key + target.substring(pos + value.length());
+                    sequence.add(target);
+                    changed = true;
+                }
+            }
+
+            if (!changed) break;
+            count++;
+        }
+
+        Collections.reverse(sequence);
+
+        return sequence;
     }
 }

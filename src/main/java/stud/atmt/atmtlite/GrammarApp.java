@@ -1,6 +1,7 @@
 package stud.atmt.atmtlite;
 
 import javafx.application.Application;
+import javafx.geometry.Insets;
 import javafx.scene.Scene;
 import javafx.scene.control.*;
 import javafx.scene.layout.FlowPane;
@@ -44,15 +45,14 @@ public class GrammarApp extends Application {
         Button secondGenerator = new Button("Построить КС грамматику");
         Button regularGenerator = new Button("Построить регулярную грамматику");
         CheckBox optimization = new CheckBox("Оптимизировать построение грамматики");
+        CheckBox buildTree = new CheckBox("Построить деревья до цепочки");
 
 
         // Обработка кнопки "Построить регулярную грамматику"
         regularGenerator.setOnAction(actionEvent -> {
             String input = inputArea.getText();
-            String language = new FormalLanguage(parseRules(input),"S").describe();
-            Grammar grammarManager = new Grammar(parseRules(input));
-            String grammar = grammarManager.buildGrammar(optimization.isSelected(), parseLanguage(language));
-            inputArea.setText(grammarManager.convertToRegular(grammar));
+            FormalLanguage formalLanguage = new FormalLanguage(parseRules(input), "S");
+            inputArea.setText(formalLanguage.buildRegular(parseLanguage(formalLanguage.describe())));
         });
 
         compareGrammar.setOnAction(actionEvent -> {
@@ -129,7 +129,6 @@ public class GrammarApp extends Application {
         });
 
         // Обработка кнопки "Путь к целевой цепочке"
-        // todo: Криво работает
         deriveButton.setOnAction(event -> {
             String input = inputArea.getText();
             String target = targetInput.getText();
@@ -142,6 +141,10 @@ public class GrammarApp extends Application {
                 result.append(sequence.get(i)).append(" -> ");
             }
             result.append(sequence.getLast());
+            if (buildTree.isSelected()) {
+                ArrayList<List<String>> sequences = grammar.makeSequences(target);
+                openTreeWindow(sequences);
+            }
             outputArea.setText(result.toString());
         });
 
@@ -158,11 +161,42 @@ public class GrammarApp extends Application {
 
         // Компоновка интерфейса
         FlowPane buttons = new FlowPane(secondGenerator, regularGenerator, compareGrammar, translateButton, outputLeftButton, makeGrammarButton, typeGrammarButton, deriveButton, describeLanguageButton);
-        VBox root = new VBox(5, inputArea, languageArea, optimization, targetInput, buttons, outputArea);
+        VBox root = new VBox(5, inputArea, languageArea, optimization, buildTree, targetInput, buttons, outputArea);
         Scene scene = new Scene(root, 500, 400);
         primaryStage.setTitle("Грамматический процессор");
         primaryStage.setScene(scene);
         primaryStage.show();
+    }
+
+    private void openTreeWindow(ArrayList<List<String>> sequences) {
+        VBox root = new VBox(10);
+        root.setPadding(new Insets(10));
+
+        for (List<String> sequence : sequences) {
+            VBox chainBox = new VBox(5);
+            chainBox.setStyle("-fx-border-color: black; -fx-border-width: 1; -fx-padding: 5;");
+
+            for (int i = 0; i < sequence.size(); i++) {
+                HBox row = new HBox();
+                row.setPadding(new Insets(0, 0, 0, i * 30)); // отступ для визуализации дерева
+
+                Label stepLabel = new Label(sequence.get(i));
+                stepLabel.setStyle("-fx-font-family: monospace; -fx-font-size: 14;");
+                row.getChildren().add(stepLabel);
+
+                chainBox.getChildren().add(row);
+            }
+
+            root.getChildren().add(chainBox);
+        }
+
+        ScrollPane scrollPane = new ScrollPane(root);
+        scrollPane.setFitToWidth(true);
+
+        Stage stage = new Stage();
+        stage.setTitle("Дерево вывода");
+        stage.setScene(new Scene(scrollPane, 600, 400));
+        stage.show();
     }
 
     public record ParsedLanguage(HashMap<String, String> terminalsAndConstraints,

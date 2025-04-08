@@ -226,6 +226,45 @@ public class FormalLanguage {
         }
     }
 
+    public String buildRegular(GrammarApp.ParsedLanguage language) {
+        StringBuilder grammar = new StringBuilder();
+
+        Set<String> terminals = new HashSet<>(language.randomTerminals());
+        Map<String, String> constraints = language.terminalsAndConstraints();
+        List<String> fixedSymbols = new ArrayList<>(constraints.keySet());
+
+        // Генерируем имена нетерминалов: S, A, B, C, ...
+        List<String> nonTerminals = new ArrayList<>();
+        nonTerminals.add("S"); // Первый нетерминал - S
+        for (int i = 0; i < fixedSymbols.size(); i++) {
+            nonTerminals.add(Character.toString((char) ('A' + i)));
+        }
+
+        grammar.append(nonTerminals.get(0)).append(" = ");
+        for (String term : terminals) {
+            grammar.append(term).append(nonTerminals.get(0)).append(" | ");
+        }
+        if (!fixedSymbols.isEmpty()) {
+            grammar.append(fixedSymbols.get(0)).append(" ").append(nonTerminals.get(1)).append(" | ");
+        }
+        grammar.append("ε\n");
+
+        // Правила для фиксированных символов
+        for (int i = 0; i < fixedSymbols.size(); i++) {
+            grammar.append(nonTerminals.get(i + 1)).append(" = ");
+            if (i + 1 < fixedSymbols.size()) {
+                grammar.append(fixedSymbols.get(i + 1)).append(" ").append(nonTerminals.get(i + 2)).append(" | ");
+            }
+            // Добавляем терминалы после фикс. символов
+            for (String term : terminals) {
+                grammar.append(term).append(nonTerminals.get(i + 1)).append(" | ");
+            }
+            grammar.append("ε\n");
+        }
+
+        return grammar.toString();
+    }
+
     private class AddressChainCouple {
         private String chain;
         private boolean deadEnd;
