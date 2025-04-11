@@ -265,6 +265,654 @@ public class FormalLanguage {
         return grammar.toString();
     }
 
+    public String buildLeft(boolean optimization) {
+        List<Rule> newRules = swapToLeft(rebuildRecursion(optimizeForDet(rules)));
+        System.out.println("Результат" + newRules);
+        if (isLL1(swapToLeft(newRules))) {
+            StringBuilder result = new StringBuilder();
+            Grammar grammar1 = new Grammar();
+            if (optimization) newRules = grammar1.optimizeRules(newRules);
+            for (Rule rule : newRules) {
+                result.append(rule.getKey()).append(" = ").append(rule.getValue()).append("\n");
+            }
+            return result.toString();
+        }
+        return "Ошибка обработки";
+    }
+
+    private List<Rule> swapToLeft(List<Rule> rules) {
+        List<Rule> result = new ArrayList<>();
+        Set<String> nonTerminals = new HashSet<>();
+        Set<String> terminals = new HashSet<>();
+
+        // 1. Анализ существующих символов
+        for (Rule rule : rules) {
+            nonTerminals.add(rule.getKey());
+            for (char c : rule.getValue().toCharArray()) {
+                String s = String.valueOf(c);
+                if (!s.equals("ε") && !Character.isUpperCase(c)) {
+                    terminals.add(s);
+                }
+            }
+        }
+
+        // 2. Преобразование каждого правила
+        for (Rule rule : rules) {
+            String rhs = rule.getValue();
+
+            // Пропускаем ε-правила
+            if (rhs.equals("ε")) {
+                result.add(rule);
+                continue;
+            }
+
+            // Разбиваем на символы, исключая апострофы
+            List<String> symbols = new ArrayList<>();
+            for (char c : rhs.toCharArray()) {
+                String symbol = String.valueOf(c);
+                if (!symbol.equals("'")) {
+                    symbols.add(symbol);
+                }
+            }
+
+            // Проверяем и преобразуем в леволинейную форму
+            if (isValidLeftLinear(String.valueOf(symbols))) {
+                result.add(rule);
+            } else {
+                // Поэтапное преобразование
+                String currentNT = rule.getKey();
+                String remaining = rhs.replace("'", ""); // Удаляем апострофы
+
+                while (!isValidLeftLinear(remaining)) {
+                    // Находим первый терминал не в конце
+                    int termPos = findTerminalNotLast(remaining);
+                    if (termPos == -1) break;
+
+                    String newNT = generateNewNonTerminal(currentNT, nonTerminals);
+                    nonTerminals.add(newNT);
+
+                    char term = remaining.charAt(termPos);
+                    String prefix = remaining.substring(0, termPos);
+                    String suffix = remaining.substring(termPos + 1);
+
+                    // Создаем новое правило
+                    result.add(new Rule(currentNT, newNT + suffix.charAt(suffix.length() - 1)));
+
+                    // Подготавливаем следующую итерацию
+                    currentNT = newNT;
+                    remaining = prefix + term;
+                    if (suffix.length() > 1) {
+                        remaining += suffix.substring(0, suffix.length() - 1);
+                    }
+                }
+
+                // Добавляем последнее правило
+                if (!remaining.isEmpty()) {
+                    result.add(new Rule(currentNT, remaining));
+                }
+            }
+        }
+
+        return result;
+    }
+
+    private boolean isValidLeftLinear(String symbols) {
+        if (symbols.isEmpty()) return false;
+
+        // Один терминал — допустимо
+        if (symbols.length() == 1) {
+            return isTerminal(symbols);
+        }
+
+        // Несколько символов: первый — нетерминал, последний — терминал
+        char first = symbols.charAt(0);
+        char last = symbols.charAt(symbols.length() - 1);
+
+        return Character.isUpperCase(first) && isTerminal(String.valueOf(last));
+    }
+
+
+    private int findTerminalNotLast(String s) {
+        for (int i = 0; i < s.length() - 1; i++) {
+            if (isTerminal(String.valueOf(s.charAt(i)))) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    private String generateNewNonTerminal(String base, Set<String> existing) {
+        int counter = 1;
+        String newNT = base + "X";
+        while (existing.contains(newNT)) {
+            newNT = base + "X" + counter++;
+        }
+        return newNT;
+    }
+
+    private boolean isTerminal(String s) {
+        return s.length() == 1 && !Character.isUpperCase(s.charAt(0));
+    }
+
+
+    private List<Rule> rebuildRecursion(List<Rule> rules) {
+        List<Rule> result = new ArrayList<>();
+        Map<String, List<Rule>> ruleMap = new HashMap<>();
+
+        // Группируем правила по левой части
+        for (Rule rule : rules) {
+            ruleMap.computeIfAbsent(rule.getKey(), k -> new ArrayList<>()).add(rule);
+        }
+
+        // Обрабатываем каждый нетерминал
+        for (String nonTerminal : new ArrayList<>(ruleMap.keySet())) {
+            List<Rule> currentRules = ruleMap.get(nonTerminal);
+            List<Rule> recursiveRules = new ArrayList<>();
+            List<Rule> nonRecursiveRules = new ArrayList<>();
+
+            // Разделяем правила на рекурсивные и нерекурсивные
+            for (Rule rule : currentRules) {
+                if (isRecursive(rule, nonTerminal)) {
+                    recursiveRules.add(rule);
+                } else {
+                    nonRecursiveRules.add(rule);
+                }
+            }
+
+            if (recursiveRules.isEmpty()) {
+                // Нет рекурсии - оставляем как есть
+                result.addAll(currentRules);
+                continue;
+            }
+
+            // Создаем новый нетерминал для итерации
+            String newNonTerminal = nonTerminal + "'";
+
+            // 1. Добавляем нерекурсивные правила
+            for (Rule rule : nonRecursiveRules) {
+                // Если есть ε-правило, оставляем его, иначе добавляем переход к новому нетерминалу
+                if (rule.getValue().equals("ε")) {
+                    result.add(rule);
+                } else {
+                    result.add(new Rule(nonTerminal, rule.getValue() + newNonTerminal));
+                }
+            }
+
+            // Если не было нерекурсивных правил, добавляем переход к новому нетерминалу
+            if (nonRecursiveRules.isEmpty()) {
+                result.add(new Rule(nonTerminal, newNonTerminal));
+            }
+
+            // 2. Обрабатываем рекурсивные правила
+            for (Rule rule : recursiveRules) {
+                String rhs = rule.getValue();
+
+                // Удаляем рекурсивный вызов
+                String newRhs = rhs.replace(nonTerminal, "");
+
+                if (newRhs.isEmpty()) {
+                    newRhs = "ε";
+                }
+
+                // Добавляем новое правило с новым нетерминалом
+                result.add(new Rule(newNonTerminal, newRhs + newNonTerminal));
+            }
+
+            // Добавляем завершающее ε-правило
+            result.add(new Rule(newNonTerminal, "ε"));
+        }
+        System.out.println(result);
+        return result;
+    }
+
+    private boolean isRecursive(Rule rule, String nonTerminal) {
+        String rhs = rule.getValue();
+        return rhs.contains(nonTerminal);
+    }
+
+    public List<Rule> optimizeForDet(List<Rule> rules) {
+        List<Rule> optimizedRules = new ArrayList<>();
+        System.out.println(rules);
+        // 1. Удаление левой рекурсии
+        rules = eliminateLeftRecursion(rules);
+        System.out.println(rules);
+        // 2. Левая факторизация
+        rules = leftFactor(rules);
+        System.out.println(rules);
+        // 3. Удаление бесполезных символов
+        //rules = removeUselessSymbols(rules);
+        System.out.println(rules);
+        // 4. Оптимизация правил
+        Map<String, List<String>> ruleMap = new HashMap<>();
+        for (Rule rule : rules) {
+            ruleMap.computeIfAbsent(rule.getKey(), k -> new ArrayList<>()).add(rule.getValue());
+        }
+
+        for (Map.Entry<String, List<String>> entry : ruleMap.entrySet()) {
+            String nonTerminal = entry.getKey();
+            List<String> productions = entry.getValue();
+
+            // Группировка по первому символу
+            Map<Character, List<String>> firstCharMap = new HashMap<>();
+            for (String prod : productions) {
+                char firstChar = prod.isEmpty() ? 'ε' : prod.charAt(0);
+                firstCharMap.computeIfAbsent(firstChar, k -> new ArrayList<>()).add(prod);
+            }
+
+            // Создание новых правил
+            for (Map.Entry<Character, List<String>> fcEntry : firstCharMap.entrySet()) {
+                if (fcEntry.getValue().size() == 1) {
+                    // Нет конфликтов - оставляем как есть
+                    optimizedRules.add(new Rule(nonTerminal, fcEntry.getValue().get(0)));
+                } else {
+                    // Конфликт - вводим новый нетерминал
+                    String newNonTerminal = nonTerminal + "'";
+                    String commonPrefix = findLongestCommonPrefix(fcEntry.getValue());
+
+                    optimizedRules.add(new Rule(nonTerminal, commonPrefix + newNonTerminal));
+
+                    // Добавляем новые правила для суффиксов
+                    for (String prod : fcEntry.getValue()) {
+                        String suffix = prod.substring(commonPrefix.length());
+                        optimizedRules.add(new Rule(newNonTerminal, suffix.isEmpty() ? "ε" : suffix));
+                    }
+                }
+            }
+        }
+        System.out.println(optimizedRules);
+        if (isLL1(optimizedRules)) return optimizedRules;
+        return null;
+    }
+
+    public boolean isLL1(List<Rule> optimizedRules) {
+        // 1. Вычисляем FIRST и FOLLOW множества
+        Map<String, Set<Character>> firstSets = computeFirstSets(optimizedRules);
+        Map<String, Set<Character>> followSets = computeFollowSets(optimizedRules, firstSets);
+
+        // 2. Группируем правила по левой части
+        Map<String, List<Rule>> ruleMap = new HashMap<>();
+        for (Rule rule : optimizedRules) {
+            ruleMap.computeIfAbsent(rule.getKey(), k -> new ArrayList<>()).add(rule);
+        }
+
+        // 3. Проверяем условия LL(1) для каждого нетерминала
+        for (String nonTerminal : ruleMap.keySet()) {
+            List<Rule> rulesForNT = ruleMap.get(nonTerminal);
+            if (rulesForNT == null || rulesForNT.size() < 2) continue;
+
+            // Получаем FOLLOW множество (может быть пустым, но не null)
+            Set<Character> follow = followSets.getOrDefault(nonTerminal, Collections.emptySet());
+
+            for (int i = 0; i < rulesForNT.size(); i++) {
+                for (int j = i + 1; j < rulesForNT.size(); j++) {
+                    Rule rule1 = rulesForNT.get(i);
+                    Rule rule2 = rulesForNT.get(j);
+
+                    Set<Character> first1 = computeFirst(rule1.getValue(), firstSets);
+                    Set<Character> first2 = computeFirst(rule2.getValue(), firstSets);
+
+                    // Проверка 1: FIRST(rule1) ∩ FIRST(rule2) ≠ ∅
+                    if (setsIntersect(first1, first2)) {
+                        return false;
+                    }
+
+                    // Проверка 2: Если ε ∈ FIRST(rule1), то FIRST(rule2) ∩ FOLLOW(A) ≠ ∅
+                    if (first1.contains('ε') && setsIntersect(first2, follow)) {
+                        return false;
+                    }
+
+                    // Проверка 3: Если ε ∈ FIRST(rule2), то FIRST(rule1) ∩ FOLLOW(A) ≠ ∅
+                    if (first2.contains('ε') && setsIntersect(first1, follow)) {
+                        return false;
+                    }
+                }
+            }
+        }
+        return true;
+    }
+
+    // Проверяет пересечение двух множеств
+    private boolean setsIntersect(Set<Character> set1, Set<Character> set2) {
+        if (set1 == null || set2 == null) return false;
+        for (Character c : set1) {
+            if (set2.contains(c)) return true;
+        }
+        return false;
+    }
+
+    private Map<String, Set<Character>> computeFirstSets(List<Rule> rules) {
+        Map<String, Set<Character>> firstSets = new HashMap<>();
+        boolean changed;
+
+        // Инициализация
+        for (Rule rule : rules) {
+            firstSets.putIfAbsent(rule.getKey(), new HashSet<>());
+        }
+
+        do {
+            changed = false;
+            for (Rule rule : rules) {
+                String lhs = rule.getKey();
+                String rhs = rule.getValue();
+
+                Set<Character> first = computeFirst(rhs, firstSets);
+                Set<Character> currentFirst = firstSets.get(lhs);
+
+                int oldSize = currentFirst.size();
+                currentFirst.addAll(first);
+                if (currentFirst.size() > oldSize) {
+                    changed = true;
+                }
+            }
+        } while (changed);
+
+        return firstSets;
+    }
+
+    private Set<Character> computeFirst(String symbol, Map<String, Set<Character>> firstSets) {
+        Set<Character> result = new HashSet<>();
+
+        if (symbol.isEmpty() || symbol.equals("ε")) {
+            result.add('ε');
+            return result;
+        }
+
+        char firstChar = symbol.charAt(0);
+
+        if (Character.isUpperCase(firstChar)) {
+            // Нетерминал
+            Set<Character> firstOfNT = firstSets.get(String.valueOf(firstChar));
+            if (firstOfNT != null) {
+                result.addAll(firstOfNT);
+            }
+        } else {
+            // Терминал
+            result.add(firstChar);
+        }
+
+        // Если первый символ может быть ε, проверяем следующий
+        if (result.contains('ε') && symbol.length() > 1) {
+            result.remove('ε');
+            result.addAll(computeFirst(symbol.substring(1), firstSets));
+        }
+
+        return result;
+    }
+
+    private Map<String, Set<Character>> computeFollowSets(List<Rule> rules,
+                                                          Map<String, Set<Character>> firstSets) {
+        Map<String, Set<Character>> followSets = new HashMap<>();
+        boolean changed;
+
+        // 1. Инициализация: собираем ВСЕ нетерминалы (из левых и правых частей)
+        Set<String> allNonTerminals = new HashSet<>();
+        for (Rule rule : rules) {
+            allNonTerminals.add(rule.getKey());
+            // Добавляем нетерминалы из правой части
+            for (char c : rule.getValue().toCharArray()) {
+                if (Character.isUpperCase(c)) {
+                    allNonTerminals.add(String.valueOf(c));
+                }
+            }
+        }
+
+        // 2. Инициализация followSets для всех нетерминалов
+        for (String nt : allNonTerminals) {
+            followSets.put(nt, new HashSet<>());
+        }
+        followSets.get("S").add('$'); // $ - символ конца строки для стартового нетерминала
+
+        // 3. Вычисление follow-множеств
+        do {
+            changed = false;
+            for (Rule rule : rules) {
+                String rhs = rule.getValue();
+                String lhs = rule.getKey();
+
+                for (int i = 0; i < rhs.length(); i++) {
+                    char c = rhs.charAt(i);
+                    if (Character.isUpperCase(c)) {
+                        String currentNt = String.valueOf(c);
+                        Set<Character> currentFollow = followSets.get(currentNt);
+                        if (currentFollow == null) {
+                            currentFollow = new HashSet<>();
+                            followSets.put(currentNt, currentFollow);
+                        }
+
+                        int oldSize = currentFollow.size();
+
+                        if (i < rhs.length() - 1) {
+                            String remaining = rhs.substring(i + 1);
+                            Set<Character> firstOfRemaining = computeFirst(remaining, firstSets);
+
+                            // Добавляем FIRST(remaining) кроме ε
+                            for (Character ch : firstOfRemaining) {
+                                if (ch != 'ε') {
+                                    currentFollow.add(ch);
+                                }
+                            }
+
+                            // Если FIRST(remaining) содержит ε, добавляем FOLLOW(lhs)
+                            if (firstOfRemaining.contains('ε')) {
+                                Set<Character> lhsFollow = followSets.get(lhs);
+                                if (lhsFollow != null) {
+                                    currentFollow.addAll(lhsFollow);
+                                }
+                            }
+                        } else {
+                            // Если нетерминал в конце, добавляем FOLLOW(lhs)
+                            Set<Character> lhsFollow = followSets.get(lhs);
+                            if (lhsFollow != null) {
+                                currentFollow.addAll(lhsFollow);
+                            }
+                        }
+
+                        if (currentFollow.size() > oldSize) {
+                            changed = true;
+                        }
+                    }
+                }
+            }
+        } while (changed);
+
+        return followSets;
+    }
+
+    private List<Rule> eliminateLeftRecursion(List<Rule> rules) {
+        List<Rule> result = new ArrayList<>();
+        Map<String, List<String>> ruleMap = new HashMap<>();
+
+        for (Rule rule : rules) {
+            ruleMap.computeIfAbsent(rule.getKey(), k -> new ArrayList<>()).add(rule.getValue());
+        }
+
+        for (String nonTerminal : new ArrayList<>(ruleMap.keySet())) {
+            List<String> alphas = new ArrayList<>();
+            List<String> betas = new ArrayList<>();
+
+            for (String prod : ruleMap.get(nonTerminal)) {
+                if (prod.startsWith(nonTerminal)) {
+                    alphas.add(prod.substring(nonTerminal.length()));
+                } else {
+                    betas.add(prod);
+                }
+            }
+
+            if (!alphas.isEmpty()) {
+                String newNonTerminal = nonTerminal + "'";
+
+                for (String beta : betas) {
+                    result.add(new Rule(nonTerminal, beta + newNonTerminal));
+                }
+
+                for (String alpha : alphas) {
+                    result.add(new Rule(newNonTerminal, alpha + newNonTerminal));
+                }
+
+                result.add(new Rule(newNonTerminal, "ε"));
+            } else {
+                for (String prod : ruleMap.get(nonTerminal)) {
+                    result.add(new Rule(nonTerminal, prod));
+                }
+            }
+        }
+
+        return result;
+    }
+
+    private String getCommonPrefix(List<String> productions, String currentProd) {
+        String longestPrefix = "";
+
+        for (String prod : productions) {
+            if (!prod.equals(currentProd)) {
+                // Находим общий префикс между currentProd и prod
+                int minLength = Math.min(currentProd.length(), prod.length());
+                int commonLength = 0;
+
+                while (commonLength < minLength
+                        && currentProd.charAt(commonLength) == prod.charAt(commonLength)) {
+                    commonLength++;
+                }
+
+                String currentPrefix = currentProd.substring(0, commonLength);
+
+                // Обновляем самый длинный найденный префикс
+                if (currentPrefix.length() > longestPrefix.length()) {
+                    longestPrefix = currentPrefix;
+                }
+            }
+        }
+
+        return longestPrefix;
+    }
+
+    private List<Rule> leftFactor(List<Rule> rules) {
+        // Реализация левой факторизации
+        List<Rule> result = new ArrayList<>();
+        Map<String, List<String>> ruleMap = new HashMap<>();
+
+        for (Rule rule : rules) {
+            ruleMap.computeIfAbsent(rule.getKey(), k -> new ArrayList<>()).add(rule.getValue());
+        }
+
+        for (String nonTerminal : ruleMap.keySet()) {
+            List<String> productions = ruleMap.get(nonTerminal);
+            Map<String, List<String>> prefixMap = new HashMap<>();
+
+            for (String prod : productions) {
+                String prefix = getCommonPrefix(productions, prod);
+                prefixMap.computeIfAbsent(prefix, k -> new ArrayList<>()).add(prod);
+            }
+
+            for (Map.Entry<String, List<String>> entry : prefixMap.entrySet()) {
+                if (entry.getValue().size() == 1) {
+                    result.add(new Rule(nonTerminal, entry.getKey()));
+                } else {
+                    String newNonTerminal = nonTerminal + "'";
+                    String commonPrefix = entry.getKey();
+
+                    result.add(new Rule(nonTerminal, commonPrefix + newNonTerminal));
+
+                    for (String prod : entry.getValue()) {
+                        String suffix = prod.substring(commonPrefix.length());
+                        result.add(new Rule(newNonTerminal, suffix.isEmpty() ? "ε" : suffix));
+                    }
+                }
+            }
+        }
+
+        return result;
+    }
+
+    private List<Rule> removeUselessSymbols(List<Rule> rules) {
+        // Реализация удаления бесполезных символов
+        Set<String> generating = new HashSet<>();
+        Set<String> reachable = new HashSet<>();
+
+        // Шаг 1: Нахождение порождающих символов
+        boolean changed;
+        do {
+            changed = false;
+            for (Rule rule : rules) {
+                if (isGenerating(rule.getValue(), generating) && !generating.contains(rule.getKey())) {
+                    generating.add(rule.getKey());
+                    changed = true;
+                }
+            }
+        } while (changed);
+
+        // Шаг 2: Нахождение достижимых символов
+        reachable.add("S"); // Стартовый символ
+        do {
+            changed = false;
+            for (Rule rule : rules) {
+                if (reachable.contains(rule.getKey())) {
+                    for (char c : rule.getValue().toCharArray()) {
+                        String symbol = String.valueOf(c);
+                        if (Character.isUpperCase(c) && !reachable.contains(symbol)
+                                && generating.contains(symbol)) {
+                            reachable.add(symbol);
+                            changed = true;
+                        }
+                    }
+                }
+            }
+        } while (changed);
+
+        // Фильтрация правил
+        List<Rule> result = new ArrayList<>();
+        for (Rule rule : rules) {
+            if (reachable.contains(rule.getKey()) &&
+                    allSymbolsGenerating(rule.getValue(), generating)) {
+                result.add(rule);
+            }
+        }
+
+        return result;
+    }
+
+    private boolean isGenerating(String production, Set<String> generating) {
+        for (char c : production.toCharArray()) {
+            if (Character.isUpperCase(c)) {
+                if (!generating.contains(String.valueOf(c))) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
+    private boolean allSymbolsGenerating(String production, Set<String> generating) {
+        for (char c : production.toCharArray()) {
+            if (Character.isUpperCase(c) && !generating.contains(String.valueOf(c))) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private String findLongestCommonPrefix(List<String> strings) {
+        if (strings.isEmpty()) return "";
+
+        String prefix = strings.getFirst();
+        for (String str : strings) {
+            while (!str.startsWith(prefix)) {
+                prefix = prefix.substring(0, prefix.length() - 1);
+                if (prefix.isEmpty()) return "";
+            }
+        }
+        return prefix;
+    }
+
+
+    private char currentNonTerminal = 'A';
+
+    private String getNextNonTerminal() {
+        if (currentNonTerminal == 'S') currentNonTerminal++;
+        return String.valueOf(currentNonTerminal++);
+    }
+
+
     private class AddressChainCouple {
         private String chain;
         private boolean deadEnd;
@@ -354,7 +1002,6 @@ public class FormalLanguage {
         if (result.isEmpty()) {
             return false; // Если результат пуст, генерация не удалась
         }
-        // Дополнительные проверки, если необходимо
         return true;
     }
 

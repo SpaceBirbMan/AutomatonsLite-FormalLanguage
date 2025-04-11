@@ -1,6 +1,7 @@
 package stud.atmt.atmtlite;
 
 import java.util.ArrayList;
+import java.util.Objects;
 
 public class Rule {
     private String key; // Левая часть правила
@@ -35,6 +36,19 @@ public class Rule {
 
     public void setKey(String key) {
         this.key = key;
+    }
+
+    @Override
+    public boolean equals(Object obj) {
+        if (this == obj) return true;
+        if (obj == null || getClass() != obj.getClass()) return false;
+        Rule rule = (Rule) obj;
+        return key.equals(rule.key) && value.equals(rule.value);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(key, value);
     }
 
     public void setValue(String value) {

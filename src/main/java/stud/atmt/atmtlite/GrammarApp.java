@@ -2,17 +2,21 @@ package stud.atmt.atmtlite;
 
 import javafx.application.Application;
 import javafx.geometry.Insets;
+import javafx.geometry.Pos;
+import javafx.scene.Group;
+import javafx.scene.Node;
 import javafx.scene.Scene;
 import javafx.scene.control.*;
 import javafx.scene.layout.FlowPane;
 import javafx.scene.layout.HBox;
+import javafx.scene.layout.Pane;
 import javafx.scene.layout.VBox;
+import javafx.scene.paint.Color;
+import javafx.scene.shape.Line;
+import javafx.scene.text.Text;
 import javafx.stage.Stage;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Objects;
+import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -60,7 +64,14 @@ public class GrammarApp extends Application {
             TextArea right = new TextArea();
             Label answer = new Label("Ответ...");
             Button compare = new Button("Сравнить");
+            Button buildRegular = new Button("Построить регулярку для ^");
             Button back = new Button("Назад");
+            buildRegular.setOnAction(actionEvent1 -> {
+                List<Rule> rulesL = parseRules(left.getText());
+                List<Rule> rulesR = parseRules(right.getText());
+            });
+
+
             compare.setOnAction(actionEvent1 -> {
 
                 FormalLanguage grammarL = new FormalLanguage(parseRules(left.getText()), "S");
@@ -74,7 +85,7 @@ public class GrammarApp extends Application {
                 }
             });
             HBox high = new HBox(left, right);
-            VBox general = new VBox(high, compare, back, answer);
+            VBox general = new VBox(high, compare, buildRegular, back, answer);
 
             Scene scene1 = new Scene(general, 500, 400);
             primaryStage.setTitle("Ы");
@@ -100,9 +111,10 @@ public class GrammarApp extends Application {
         });
 
         // Генерация КС-языка
+        // todo.bug: Отказало
         secondGenerator.setOnAction(actionEvent -> {
             String input = inputArea.getText();
-            String language = new FormalLanguage(parseRules(input),"S").describe();
+            String language = new FormalLanguage(parseRules(input),firstSymbol).describe();
             System.out.println(language);
             System.out.println(parseLanguage(language));
             inputArea.setText(new Grammar(parseRules(input)).buildGrammar(optimization.isSelected(), parseLanguage(language)));
@@ -114,8 +126,7 @@ public class GrammarApp extends Application {
             String input = inputArea.getText();
             List<Rule> rules = parseRules(input);
             FormalLanguage fl = new FormalLanguage(rules, firstSymbol);
-            String result = fl.outputLeft();
-            outputArea.setText("Левый вывод: " + result);
+            outputArea.setText(fl.buildLeft(optimization.isSelected()));
         });
 
         // Обработка кнопки "Тип грамматики"
@@ -142,8 +153,9 @@ public class GrammarApp extends Application {
             }
             result.append(sequence.getLast());
             if (buildTree.isSelected()) {
-                ArrayList<List<String>> sequences = grammar.makeSequences(target);
-                openTreeWindow(sequences);
+                ArrayList<List<String>> sequences = (ArrayList<List<String>>) grammar.makeSequences(target);
+                System.out.println(sequences);
+                openTreeWindow(sequences, target);
             }
             outputArea.setText(result.toString());
         });
@@ -168,35 +180,129 @@ public class GrammarApp extends Application {
         primaryStage.show();
     }
 
-    private void openTreeWindow(ArrayList<List<String>> sequences) {
-        VBox root = new VBox(10);
-        root.setPadding(new Insets(10));
+    private List<Rule> intersect(List<Rule> rulesL, List<Rule> rulesR) {
+        Set<Rule> ruleSetR = new HashSet<>(rulesR); // Используем hashCode/equals
+        List<Rule> intersection = new ArrayList<>();
 
-        for (List<String> sequence : sequences) {
-            VBox chainBox = new VBox(5);
-            chainBox.setStyle("-fx-border-color: black; -fx-border-width: 1; -fx-padding: 5;");
-
-            for (int i = 0; i < sequence.size(); i++) {
-                HBox row = new HBox();
-                row.setPadding(new Insets(0, 0, 0, i * 30)); // отступ для визуализации дерева
-
-                Label stepLabel = new Label(sequence.get(i));
-                stepLabel.setStyle("-fx-font-family: monospace; -fx-font-size: 14;");
-                row.getChildren().add(stepLabel);
-
-                chainBox.getChildren().add(row);
+        for (Rule rule : rulesL) {
+            if (ruleSetR.contains(rule)) {
+                intersection.add(rule);
             }
-
-            root.getChildren().add(chainBox);
         }
 
-        ScrollPane scrollPane = new ScrollPane(root);
-        scrollPane.setFitToWidth(true);
+        return intersection;
+    }
 
-        Stage stage = new Stage();
-        stage.setTitle("Дерево вывода");
-        stage.setScene(new Scene(scrollPane, 600, 400));
-        stage.show();
+
+    private static final double NODE_RADIUS = 20;
+    private static final double LEVEL_SPACING = 100;
+    private static final double SIBLING_SPACING = 50;
+
+    private void openTreeWindow(List<List<String>> sequences, String target) {
+        Pane graphPane = new Pane();
+        graphPane.setPrefSize(2000, 2000);
+
+        // Собираем все уникальные состояния и их позиции
+        Map<String, NodeInfo> nodes = buildGraphStructure(sequences);
+
+        // Рисуем узлы и связи
+        drawGraph(graphPane, nodes, sequences, target);
+
+        // Настраиваем скроллинг
+        ScrollPane scrollPane = new ScrollPane(graphPane);
+        scrollPane.setFitToWidth(false);
+        scrollPane.setFitToHeight(false);
+
+        Stage primaryStage = new Stage();
+
+        primaryStage.setTitle("Граф выводов: " + firstSymbol + " → " + target);
+        primaryStage.setScene(new Scene(scrollPane, 800, 600));
+        primaryStage.show();
+    }
+
+    private Map<String, NodeInfo> buildGraphStructure(List<List<String>> sequences) {
+        Map<String, NodeInfo> nodes = new LinkedHashMap<>();
+        Map<String, Integer> levels = new HashMap<>();
+
+        // Определяем уровни для каждого узла (по максимальной глубине)
+        for (List<String> seq : sequences) {
+            for (int i = 0; i < seq.size(); i++) {
+                String node = seq.get(i);
+                levels.merge(node, i, Math::max);
+            }
+        }
+
+        // Группируем узлы по уровням
+        Map<Integer, List<String>> nodesByLevel = new TreeMap<>();
+        levels.forEach((node, level) -> {
+            nodesByLevel.computeIfAbsent(level, k -> new ArrayList<>()).add(node);
+        });
+
+        // Рассчитываем позиции для каждого узла
+        nodesByLevel.forEach((level, levelNodes) -> {
+            double y = 50 + level * LEVEL_SPACING;
+            for (int i = 0; i < levelNodes.size(); i++) {
+                String node = levelNodes.get(i);
+                double x = 100 + i * SIBLING_SPACING;
+                nodes.put(node, new NodeInfo(x, y, level));
+            }
+        });
+
+        return nodes;
+    }
+
+    private void drawGraph(Pane pane, Map<String, NodeInfo> nodes, List<List<String>> sequences , String target) {
+        // Рисуем связи сначала (чтобы узлы были сверху)
+        for (List<String> seq : sequences) {
+            for (int i = 0; i < seq.size() - 1; i++) {
+                String from = seq.get(i);
+                String to = seq.get(i + 1);
+
+                NodeInfo fromInfo = nodes.get(from);
+                NodeInfo toInfo = nodes.get(to);
+
+                if (fromInfo != null && toInfo != null) {
+                    Line line = new Line(
+                            fromInfo.x, fromInfo.y,
+                            toInfo.x, toInfo.y
+                    );
+                    line.getStyleClass().add("graph-edge");
+                    pane.getChildren().add(line);
+                }
+            }
+        }
+
+        // Рисуем узлы
+        nodes.forEach((node, info) -> {
+            Group nodeGroup = new Group();
+
+            // Круг узла
+            javafx.scene.shape.Circle circle = new javafx.scene.shape.Circle(
+                    info.x, info.y, NODE_RADIUS, Color.CYAN
+            );
+            circle.getStyleClass().add(node.equals(target) ? "target-node" :
+                    node.equals(firstSymbol) ? "start-node" : "normal-node");
+
+            // Текст узла
+            Text text = new Text(node);
+            text.setX(info.x - text.getLayoutBounds().getWidth()/2);
+            text.setY(info.y + text.getLayoutBounds().getHeight()/4);
+            text.getStyleClass().add("node-text");
+
+            nodeGroup.getChildren().addAll(circle, text);
+            pane.getChildren().add(nodeGroup);
+        });
+    }
+
+    private static class NodeInfo {
+        double x, y;
+        int level;
+
+        NodeInfo(double x, double y, int level) {
+            this.x = x;
+            this.y = y;
+            this.level = level;
+        }
     }
 
     public record ParsedLanguage(HashMap<String, String> terminalsAndConstraints,

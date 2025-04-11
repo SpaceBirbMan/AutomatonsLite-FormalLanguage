@@ -1,9 +1,6 @@
 package stud.atmt.atmtlite;
 
 import java.util.*;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
-import java.util.stream.Collectors;
 
 public class Grammar {
     private List<Rule> rules; // Правила
@@ -79,7 +76,7 @@ public class Grammar {
         return grammar.toString();
     }
 
-    private ArrayList<Rule> optimizeRules(ArrayList<Rule> rules) {
+    ArrayList<Rule> optimizeRules(List<Rule> rules) {
         ArrayList<Rule> uniqueRules = new ArrayList<>();
         for (Rule rule : rules) {
             if (!uniqueRules.contains(rule)) {
@@ -107,7 +104,7 @@ public class Grammar {
 
         HashMap<String, String> terminalReplacements = new HashMap<>();
         for (Rule rule : mergedRules) {
-            if (rule.getValue().matches("[a-z]+")) { // Если правило имеет вид A = a
+            if (rule.getValue().matches(".+")) { // Если правило имеет вид A = a
                 terminalReplacements.put(rule.getKey(), rule.getValue());
             }
         }
@@ -345,49 +342,65 @@ public class Grammar {
         return rules;
     }
 
-    public ArrayList<List<String>> makeSequences(String target) {
-        ArrayList<List<String>> result = new ArrayList<>();
-        List<String> initial = new ArrayList<>();
-        initial.add(startSymbol); // стартовый символ
-        dfs(startSymbol, target, initial, result, 0);
-        return result;
+    private final String epsilon = "ε"; // Символ для пустой строки
+
+    public List<List<String>> makeSequences(String target) {
+        List<List<String>> allPaths = new ArrayList<>();
+        List<String> currentPath = new ArrayList<>();
+        currentPath.add(startSymbol);
+        generatePaths(target, currentPath, allPaths);
+        return allPaths;
     }
 
-    private void dfs(String current, String target, List<String> path, List<List<String>> result, int depth) {
-        if (depth > 20) return;
+    private void generatePaths(String target, List<String> currentPath, List<List<String>> allPaths) {
+        String currentString = currentPath.getLast();
 
-        if (current.equals(target)) {
-            result.add(new ArrayList<>(path));
+        // If current string equals target, add this path to results
+        if (currentString.equals(target)) {
+            allPaths.add(new ArrayList<>(currentPath));
             return;
         }
 
-        if (current.replaceAll("[A-Z]", "").length() > target.length()) return; // Только терминалы сравниваем
+        // If current string is longer than target + some buffer for possible non-terminals, stop this path
+        if (currentString.length() > target.length() + 5) { // Added buffer for non-terminals
+            return;
+        }
 
-        for (Rule rule : rules) {
-            String from = rule.getKey();
-            String to = rule.getValue();
+        boolean hasNonTerminal = false;
 
-            // Все вхождения нетерминала, который нужно заменить
-            List<Integer> positions = new ArrayList<>();
-            int idx = current.indexOf(from);
-            while (idx != -1) {
-                positions.add(idx);
-                idx = current.indexOf(from, idx + 1);
-            }
+        // Find all possible non-terminals in the current string
+        for (int i = 0; i < currentString.length(); i++) {
+            char c = currentString.charAt(i);
+            if (Character.isUpperCase(c)) { // Assuming non-terminals are uppercase
+                hasNonTerminal = true;
+                String nonTerminal = String.valueOf(c);
 
-            // Пробуем замену в каждой позиции
-            for (int pos : positions) {
-                String newStr;
-                if (to.equals("ε")) {
-                    newStr = current.substring(0, pos) + current.substring(pos + from.length());
-                } else {
-                    newStr = current.substring(0, pos) + to + current.substring(pos + from.length());
+                // Apply all rules for this non-terminal
+                for (Rule rule : rules) {
+                    if (rule.getKey().equals(nonTerminal)) {
+                        // Replace non-terminal with rule's value
+                        String newString = currentString.substring(0, i) +
+                                rule.getValue() +
+                                currentString.substring(i + 1);
+
+                        // Add to path and continue recursively
+                        currentPath.add(newString);
+                        generatePaths(target, currentPath, allPaths);
+                        currentPath.removeLast(); // backtrack
+                    }
                 }
 
-                path.add(newStr);
-                dfs(newStr, target, path, result, depth + 1);
-                path.remove(path.size() - 1);
+                // Handle implicit epsilon production (when someone forgot type or ctrl-v epsilon)
+                String epsilonString = currentString.substring(0, i) + currentString.substring(i + 1);
+                currentPath.add(epsilonString);
+                generatePaths(target, currentPath, allPaths);
+                currentPath.removeLast(); // backtrack
             }
+        }
+
+        // If no non-terminals left but string doesn't match target
+        if (!hasNonTerminal && !currentString.equals(target)) {
+            return; // abandon this path
         }
     }
 
