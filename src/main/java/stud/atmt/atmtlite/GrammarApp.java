@@ -69,6 +69,26 @@ public class GrammarApp extends Application {
             buildRegular.setOnAction(actionEvent1 -> {
                 List<Rule> rulesL = parseRules(left.getText());
                 List<Rule> rulesR = parseRules(right.getText());
+
+                FormalLanguage leftL = new FormalLanguage(rulesL, "S");
+                FormalLanguage rightL = new FormalLanguage(rulesR, "S");
+
+                List<String> chainsL = leftL.generateChains(100);
+                List<String> chainsR = rightL.generateChains(100);
+
+                Set<String> setL = new HashSet<>(chainsL);
+                Set<String> setR = new HashSet<>(chainsR);
+                Set<String> result = new HashSet<>(setL);
+                result.retainAll(setR);
+                List<Rule> ruleList = buildGrammarFromChains(result);
+                StringBuilder grammar = new StringBuilder();
+                for (Rule rule : ruleList) {
+                    grammar.append(rule.getKey()).append(" = ").append(rule.getValue()).append("\n");
+                }
+                left.setText(grammar.toString());
+                right.setText("");
+                DFA dfa = buildDFAFromRules(ruleList);
+                answer.setText(dfa.toString());
             });
 
 
@@ -179,20 +199,6 @@ public class GrammarApp extends Application {
         primaryStage.setScene(scene);
         primaryStage.show();
     }
-
-    private List<Rule> intersect(List<Rule> rulesL, List<Rule> rulesR) {
-        Set<Rule> ruleSetR = new HashSet<>(rulesR); // Используем hashCode/equals
-        List<Rule> intersection = new ArrayList<>();
-
-        for (Rule rule : rulesL) {
-            if (ruleSetR.contains(rule)) {
-                intersection.add(rule);
-            }
-        }
-
-        return intersection;
-    }
-
 
     private static final double NODE_RADIUS = 20;
     private static final double LEVEL_SPACING = 100;
@@ -490,6 +496,63 @@ public class GrammarApp extends Application {
 
         return rules;
     }
+
+    private char currentNonTerminal = 'A';
+
+    // todo.tips: А что после Z делать будешь?
+    private String getNextNonTerminal() {
+        if (currentNonTerminal == 'S') currentNonTerminal++;
+        return String.valueOf(currentNonTerminal++);
+    }
+
+    public List<Rule> buildGrammarFromChains(Set<String> chains) {
+        List<Rule> rules = new ArrayList<>();
+        Map<String, String> transitions = new HashMap<>();
+        int stateCounter = 0;
+
+        for (String chain : chains) {
+            String currentState = "S";
+            for (int i = 0; i < chain.length(); i++) {
+                String symbol = String.valueOf(chain.charAt(i));
+                String key = currentState + "_" + symbol;
+
+                // если уже есть переход — переиспользуем
+                String nextState = transitions.getOrDefault(key, null);
+                if (nextState == null) {
+                    nextState = getNextNonTerminal();
+                    transitions.put(key, nextState);
+                    rules.add(new Rule(currentState, symbol + nextState));
+                }
+
+                currentState = nextState;
+            }
+
+            // помечаем конец цепочки ε-переходом (можно заменить на флаг терминального состояния)
+            rules.add(new Rule(currentState, "ε"));
+        }
+
+        return rules;
+    }
+
+    public DFA buildDFAFromRules(List<Rule> rules) {
+        DFA dfa = new DFA();
+
+        for (Rule rule : rules) {
+            String from = rule.getKey();
+            String value = rule.getValue();
+
+            if (value.equals("ε")) {
+                dfa.addAcceptingState(from);
+            } else {
+                char symbol = value.charAt(0);
+                String to = value.substring(1);
+                dfa.addTransition(from, symbol, to);
+            }
+        }
+
+        return dfa;
+    }
+
 
     public static void main(String[] args) {
         launch(args);

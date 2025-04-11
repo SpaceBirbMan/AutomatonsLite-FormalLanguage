@@ -904,15 +904,6 @@ public class FormalLanguage {
         return prefix;
     }
 
-
-    private char currentNonTerminal = 'A';
-
-    private String getNextNonTerminal() {
-        if (currentNonTerminal == 'S') currentNonTerminal++;
-        return String.valueOf(currentNonTerminal++);
-    }
-
-
     private class AddressChainCouple {
         private String chain;
         private boolean deadEnd;
