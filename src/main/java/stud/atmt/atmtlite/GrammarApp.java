@@ -22,7 +22,39 @@ import java.util.regex.Pattern;
 
 public class GrammarApp extends Application {
 
-    // 7, 9а, 11, 12
+    /*
+    9. Дана грамматика G:
+    S = aSbS | bSaS | ε
+    а) Постройте все возможные деревья вывода для цепочки abab
+
+    11. Написать леволинейную регулярную грамматику, эквивалентную данной праволинейной,
+    допускающую детерминированный разбор:
+    a)
+    S = 0S | 0B
+    B = 1B | 1C
+    C = 1C | 
+    б)
+    S = aA | aB | bA
+    A = bS
+    B = aS | bB | 
+
+    12. Даны две грамматики G1 и G2, порождающие языки L1 и L2. Построить регулярную
+    грамматику для L1 v L2. Для полученной грамматики построить детерминированный конечный
+    автомат.
+    G1:
+    S = S1 | A0
+    A = A1 | 0A
+
+    G2:
+    S = A1 | B0 | E1
+    A = S1
+    B = C1 | D1
+    C = 0
+    D = B1
+    E = E0 | 1
+     */
+
+    //todo.todo: Закоммитить
 
     @Override
     public void start(Stage primaryStage) {
@@ -87,6 +119,8 @@ public class GrammarApp extends Application {
                 }
                 left.setText(grammar.toString());
                 right.setText("");
+//                NFA nfa = new NFA();
+//                nfa.buildNFA(ruleList, firstSymbol);
                 DFA dfa = buildDFAFromRules(ruleList);
                 answer.setText(dfa.toString());
             });
@@ -317,7 +351,7 @@ public class GrammarApp extends Application {
                                  ArrayList<String> randomTerminals) {}
 
     // todo: Не переварил L = { a^n0, b^n0 | n0 = 1 }
-    private ParsedLanguage parseLanguage(String input) {
+    public ParsedLanguage parseLanguage(String input) {
         if (isLanguageCorrect(input)) {
             HashMap<String, String> terminalsAndConstraints = getTerminals(input); // терминал - его ограничение a^n | n > 0 -> {a, n>0}
             HashMap<String, String> terminalsGroups = getGroups(input);
@@ -552,7 +586,6 @@ public class GrammarApp extends Application {
 
         return dfa;
     }
-
 
     public static void main(String[] args) {
         launch(args);
